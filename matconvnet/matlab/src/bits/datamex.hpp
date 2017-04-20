@@ -3,7 +3,7 @@
 // @author Andrea Vedaldi
 
 /*
-Copyright (C) 2015 Andrea Vedaldi.
+Copyright (C) 2015-16 Andrea Vedaldi.
 All rights reserved.
 
 This file is part of the VLFeat library and is made available under
@@ -33,8 +33,8 @@ namespace vl {
 
   protected:
 #if ENABLE_GPU
-    vl::Error initGpu() ;
-    vl::Error validateGpu() ;
+    vl::ErrorCode initGpu() ;
+    vl::ErrorCode validateGpu() ;
     mxArray * canary ; // if it breathes, the GPU state is valid
     bool gpuIsInitialized ;
 #endif
@@ -46,14 +46,17 @@ namespace vl {
   {
   public:
     MexTensor(MexContext & context) ;
-    vl::Error init(Device dev, TensorGeometry const & geom) ;
-    vl::Error init(Device dev, TensorGeometry const & geom, float value) ;
-    vl::Error initWithZeros(Device dev, TensorGeometry const & geom) ;
-    vl::Error init(mxArray const * array) ;
+    vl::ErrorCode init(mxArray const * array) ;
+    vl::ErrorCode init(DeviceType deviceType, DataType dataType, TensorShape const & shape) ;
+    vl::ErrorCode initWithZeros(DeviceType deviceType, DataType dataType, TensorShape const & shape) ;
+    vl::ErrorCode initWithValue(DeviceType deviceType, DataType dataType, TensorShape const & shape, double value) ;
 
+    void makePersistent() ;
     mxArray * relinquish() ;
     void clear() ;
     ~MexTensor() ;
+
+    size_t getMemorySize() const ;
 
   protected:
     MexContext & context ;
@@ -66,11 +69,12 @@ namespace vl {
   private: // prevention
     MexTensor(MexTensor const &) ;
     MexTensor & operator= (MexTensor & tensor) ;
+    vl::ErrorCode initHelper(DeviceType deviceType, DataType dataType, TensorShape const & shape, bool fillWithZeros = false) ;
   } ;
 
-  void print(char const * str, Tensor const & tensor) ;
+  void print(char const * str, MexTensor const & tensor) ;
 
-  void mexThrowError(Context const& context, vl::Error error) ;
+  void mexThrowError(Context const& context, vl::ErrorCode error) ;
 }
 
 

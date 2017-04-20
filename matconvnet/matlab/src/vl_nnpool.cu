@@ -32,7 +32,7 @@ enum {
 } ;
 
 /* options */
-vlmxOption  options [] = {
+VLMXOption  options [] = {
   {"Stride",           1,   opt_stride            },
   {"Pad",              1,   opt_pad               },
   {"Method",           1,   opt_method            },
@@ -153,14 +153,14 @@ void mexFunction(int nout, mxArray *out[],
 
       case opt_method :
         if (!vlmxIsString(optarg,-1)) {
-           vlmxError(vlmxErrInvalidArgument, "METHOD is not a string.") ;
+           vlmxError(VLMXE_IllegalArgument, "METHOD is not a string.") ;
         }
         if (vlmxIsEqualToStringI(optarg, "max")) {
           method = vl::vlPoolingMax ;
         } else if (vlmxIsEqualToStringI(optarg, "avg")) {
           method = vl::vlPoolingAverage ;
         } else {
-          vlmxError(vlmxErrInvalidArgument, "METHOD is not a supported method.") ;
+          vlmxError(VLMXE_IllegalArgument, "METHOD is not a supported method.") ;
         }
         break;
 
@@ -185,10 +185,15 @@ void mexFunction(int nout, mxArray *out[],
   vl::MexTensor derOutput(context) ;
 
   data.init(in[IN_DATA]) ;
-  if (backMode) { derOutput.init(in[IN_DEROUTPUT]) ; }
+  data.reshape(4) ; // -> 4 dimensions
+
+  if (backMode) {
+    derOutput.init(in[IN_DEROUTPUT]) ;
+    derOutput.reshape(4) ; // -> 4 dimensions
+  }
 
   if (backMode && ! vl::areCompatible(data, derOutput)) {
-    mexErrMsgTxt("DATA and DEROUTPUT are not both CPU or GPU arrays.") ;
+    mexErrMsgTxt("DATA and DEROUTPUT do not have compatible formats.") ;
   }
 
   if (!vlmxIsPlainMatrix(in[IN_SIZE],-1,-1)) {
@@ -207,7 +212,7 @@ void mexFunction(int nout, mxArray *out[],
       mexErrMsgTxt("SIZE has neither one nor two elements.") ;
   }
 
-  /* Basic compatibility of geometry */
+  /* Basic compatibility of Shape */
   if (strideX < 1 || strideY < 1) {
     mexErrMsgTxt("At least one element of STRIDE is smaller than one.") ;
   }
@@ -228,35 +233,34 @@ void mexFunction(int nout, mxArray *out[],
       padRight >= poolWidth ||
       padTop >= poolHeight  ||
       padBottom >= poolHeight) {
-    mexErrMsgTxt("A padding value is larger or equal than the size of the pooling window.") ;
+    mexErrMsgTxt("A padding value is larger or equal to the size of the pooling window.") ;
   }
 
-  /* Get the output geometry */
-  vl::TensorGeometry outputGeom((data.getHeight() + (padTop+padBottom) - poolHeight)/strideY + 1,
-                                (data.getWidth()  + (padLeft+padRight) - poolWidth)/strideX + 1,
-                                data.getDepth(),
-                                data.getSize()) ;
+  /* Get the output Shape */
+  vl::TensorShape outputShape((data.getHeight() + (padTop+padBottom) - poolHeight)/strideY + 1,
+                              (data.getWidth()  + (padLeft+padRight) - poolWidth)/strideX + 1,
+                              data.getDepth(),
+                              data.getSize()) ;
 
-  if (backMode && (derOutput != outputGeom)) {
+  if (backMode && (derOutput != outputShape)) {
     mexErrMsgTxt("DEROUTPUT dimensions are incompatible with X and POOL.") ;
   }
 
   /* Create output buffers */
-  vl::Device type = data.getMemoryType() ;
+  vl::DeviceType deviceType = data.getDeviceType() ;
+  vl::DataType dataType = data.getDataType() ;
   vl::MexTensor output(context) ;
   vl::MexTensor derData(context) ;
-  vl::MexTensor derFilters(context) ;
-  vl::MexTensor derBiases(context) ;
 
   if (!backMode) {
-    output.init(type, outputGeom, 0) ;
+    output.initWithZeros(deviceType, dataType, outputShape) ;
   } else {
-    derData.init(type, data.getGeometry(), 0) ;
+    derData.initWithZeros(deviceType, dataType, data.getShape()) ;
   }
 
   if (verbosity > 0) {
-    mexPrintf("vl_nnpool: %s; %s", backMode?"backward":"forward", (data.getMemoryType()==vl::GPU) ? "GPU" : "CPU") ;
-    if (data.getMemoryType() == vl::GPU) {
+    mexPrintf("vl_nnpool: %s; %s", backMode?"backward":"forward", (data.getDeviceType()==vl::VLDT_GPU) ? "GPU" : "CPU") ;
+    if (data.getDeviceType() == vl::VLDT_GPU) {
 #if ENABLE_CUDNN
       mexPrintf("; %s\n", context.getCudaHelper().getCudnnEnabled() ? "cuDNN" : "MatConvNet") ;
 #else
@@ -283,7 +287,7 @@ void mexFunction(int nout, mxArray *out[],
   /*                                                    Do the work */
   /* -------------------------------------------------------------- */
 
-  vl::Error error ;
+  vl::ErrorCode error ;
   if (!backMode) {
     error = vl::nnpooling_forward(context,
                                   output, data,
@@ -304,7 +308,7 @@ void mexFunction(int nout, mxArray *out[],
   /*                                                         Finish */
   /* -------------------------------------------------------------- */
 
-  if (error != vl::vlSuccess) {
+  if (error != vl::VLE_Success) {
     mexErrMsgTxt(context.getLastErrorMessage().c_str()) ;
   }
   if (backMode) {

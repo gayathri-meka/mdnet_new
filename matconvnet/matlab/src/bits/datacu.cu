@@ -3,7 +3,7 @@
 // @author Andrea Vedaldi
 
 /*
-Copyright (C) 2015 Andrea Vedaldi.
+Copyright (C) 2015-16 Andrea Vedaldi.
 All rights reserved.
 
 This file is part of the VLFeat library and is made available under
@@ -29,11 +29,15 @@ using namespace vl ;
  * ---------------------------------------------------------------- */
 
 vl::CudaHelper::CudaHelper()
-: isCublasInitialized(false)
+: isCublasInitialized(false), cudaStream(0)
 #if ENABLE_CUDNN
 , isCudnnInitialized(false), cudnnEnabled(true)
 #endif
-{ }
+{
+#if ENABLE_CUDNN
+  resetCudnnConvolutionSettings() ;
+#endif
+}
 
 vl::CudaHelper::~CudaHelper()
 {
@@ -43,6 +47,7 @@ vl::CudaHelper::~CudaHelper()
 void
 vl::CudaHelper::clear()
 {
+  setStream(NULL) ;
   clearCublas() ;
 #ifdef ENABLE_CUDNN
   clearCudnn() ;
@@ -52,6 +57,7 @@ vl::CudaHelper::clear()
 void
 vl::CudaHelper::invalidateGpu()
 {
+  cudaStream = NULL ;
 #ifndef NDEBUG
   std::cout<<"CudaHelper::invalidateGpu()"<<std::endl ;
 #endif
@@ -59,6 +65,37 @@ vl::CudaHelper::invalidateGpu()
 #ifdef ENABLE_CUDNN
   isCudnnInitialized = false ;
 #endif
+}
+
+vl::ErrorCode
+CudaHelper::setStream(cudaStream_t streamId)
+{
+  if (isCublasInitialized) {
+    cublasStatus_t status = cublasSetStream(cublasHandle, streamId) ;
+    if (status != CUBLAS_STATUS_SUCCESS) {
+      return catchCublasError(status, __func__) ;
+    }
+  }
+#ifdef ENABLE_CUDNN
+  if (isCudnnInitialized) {
+    cudnnStatus_t status = cudnnSetStream(cudnnHandle, streamId) ;
+    if (status != CUDNN_STATUS_SUCCESS) {
+      if (isCublasInitialized) {
+        // restore cuBLAS state
+        cublasSetStream(cublasHandle, this->cudaStream) ;
+      }
+      return catchCudnnError(status, __func__) ;
+    }
+  }
+#endif
+  this->cudaStream = streamId ;
+  return VLE_Success ;
+}
+
+cudaStream_t
+CudaHelper::getStream() const
+{
+  return this->cudaStream ;
 }
 
 /* -------------------------------------------------------------------
@@ -70,8 +107,14 @@ vl::CudaHelper::getCublasHandle(cublasHandle_t* handle)
 {
   if (!isCublasInitialized) {
     clearCublas() ;
-    cublasStatus_t stat = cublasCreate(&cublasHandle) ;
-    if (stat != CUBLAS_STATUS_SUCCESS) { return stat ; }
+    cublasStatus_t status = cublasCreate(&cublasHandle) ;
+    if (status != CUBLAS_STATUS_SUCCESS) { return status ; }
+
+    status = cublasSetStream(cublasHandle, cudaStream) ;
+    if (status != CUBLAS_STATUS_SUCCESS) {
+      cublasDestroy(cublasHandle) ;
+      return status ;
+    }
     isCublasInitialized = true ;
   }
   *handle = cublasHandle ;
@@ -123,6 +166,99 @@ vl::CudaHelper::setCudnnEnabled(bool active)
 {
   cudnnEnabled = active ;
 }
+
+/* -------------------------------------------------------------------
+ * cuDNN parameters
+ * ---------------------------------------------------------------- */
+
+void
+vl::CudaHelper::resetCudnnConvolutionSettings()
+{
+  cudnnConvolutionFwdSpecificAlgo = false ;
+  cudnnConvolutionFwdPreference = CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT ;
+  cudnnConvolutionFwdAlgo = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM ;
+  cudnnConvolutionFwdWorkSpaceLimit = 512 * 1024 * 1024 ; // 512MB
+  cudnnConvolutionFwdWorkSpaceUsed = 0 ;
+
+  cudnnConvolutionBwdFilterSpecificAlgo = false ;
+  cudnnConvolutionBwdFilterPreference = CUDNN_CONVOLUTION_BWD_FILTER_SPECIFY_WORKSPACE_LIMIT ;
+  cudnnConvolutionBwdFilterAlgo = CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0 ;
+  cudnnConvolutionBwdFilterWorkSpaceLimit = 512 * 1024 * 1024 ; // 512MB
+  cudnnConvolutionBwdFilterWorkSpaceUsed = 0 ;
+
+  cudnnConvolutionBwdDataSpecificAlgo = false ;
+  cudnnConvolutionBwdDataPreference = CUDNN_CONVOLUTION_BWD_DATA_SPECIFY_WORKSPACE_LIMIT ;
+  cudnnConvolutionBwdDataAlgo = CUDNN_CONVOLUTION_BWD_DATA_ALGO_0 ;
+  cudnnConvolutionBwdDataWorkSpaceLimit = 512 * 1024 * 1024 ; // 512MB
+  cudnnConvolutionBwdDataWorkSpaceUsed = 0 ;
+}
+
+void
+vl::CudaHelper::setCudnnConvolutionFwdPreference(cudnnConvolutionFwdPreference_t x,
+                                                 size_t workSpaceLimit)
+{
+  cudnnConvolutionFwdSpecificAlgo = false ;
+  cudnnConvolutionFwdPreference = x ;
+  cudnnConvolutionFwdWorkSpaceLimit = workSpaceLimit ;
+}
+
+void
+vl::CudaHelper::setCudnnConvolutionFwdAlgo(cudnnConvolutionFwdAlgo_t x)
+{
+  cudnnConvolutionFwdSpecificAlgo = true ;
+  cudnnConvolutionFwdAlgo = x ;
+}
+
+size_t
+vl::CudaHelper::getCudnnConvolutionFwdWorkSpaceUsed() const
+{
+  return cudnnConvolutionFwdWorkSpaceUsed ;
+}
+
+void
+vl::CudaHelper::setCudnnConvolutionBwdFilterPreference(cudnnConvolutionBwdFilterPreference_t x,
+                                                       size_t workSpaceLimit)
+{
+  cudnnConvolutionBwdFilterSpecificAlgo = false ;
+  cudnnConvolutionBwdFilterPreference = x ;
+  cudnnConvolutionBwdFilterWorkSpaceLimit = workSpaceLimit ;
+}
+
+void
+vl::CudaHelper::setCudnnConvolutionBwdFilterAlgo(cudnnConvolutionBwdFilterAlgo_t x)
+
+{
+  cudnnConvolutionBwdFilterSpecificAlgo = true ;
+  cudnnConvolutionBwdFilterAlgo = x ;
+}
+
+size_t
+vl::CudaHelper::getCudnnConvolutionBwdFilterWorkSpaceUsed() const
+{
+  return cudnnConvolutionBwdFilterWorkSpaceUsed ;
+}
+
+void
+vl::CudaHelper::setCudnnConvolutionBwdDataPreference(cudnnConvolutionBwdDataPreference_t x,
+                                                     size_t workSpaceLimit)
+{
+  cudnnConvolutionBwdDataSpecificAlgo = false ;
+  cudnnConvolutionBwdDataPreference = x ;
+  cudnnConvolutionBwdDataWorkSpaceLimit = workSpaceLimit ;
+}
+
+void
+vl::CudaHelper::setCudnnConvolutionBwdDataAlgo(cudnnConvolutionBwdDataAlgo_t x)
+{
+  cudnnConvolutionBwdDataSpecificAlgo = true ;
+  cudnnConvolutionBwdDataAlgo = x ;
+}
+
+size_t
+vl::CudaHelper::getCudnnConvolutionBwdDataWorkSpaceUsed() const
+{
+  return cudnnConvolutionBwdDataWorkSpaceUsed ;
+}
 #endif
 
 /* -------------------------------------------------------------------
@@ -151,11 +287,11 @@ getCublasErrorMessageFromStatus(cublasStatus_t status)
   return "CuBLAS unknown status" ;
 }
 
-vl::Error
+vl::ErrorCode
 vl::CudaHelper::catchCublasError(cublasStatus_t status, char const * description)
 {
   /* if there is no CuBLAS error, do not do anything */
-  if (status == CUBLAS_STATUS_SUCCESS) { return vl::vlSuccess ; }
+  if (status == CUBLAS_STATUS_SUCCESS) { return vl::VLE_Success ; }
 
   /* if there is a CuBLAS error, store it */
   lastCublasError = status ;
@@ -164,7 +300,7 @@ vl::CudaHelper::catchCublasError(cublasStatus_t status, char const * description
     message = std::string(description) + " (" + message + ")" ;
   }
   lastCublasErrorMessage = message ;
-  return vl::vlErrorCublas ;
+  return vl::VLE_Cublas ;
 }
 
 cublasStatus_t
@@ -184,11 +320,11 @@ vl::CudaHelper::getLastCublasErrorMessage() const
  * ---------------------------------------------------------------- */
 
 #if ENABLE_CUDNN
-vl::Error
+vl::ErrorCode
 vl::CudaHelper::catchCudnnError(cudnnStatus_t status, char const* description)
 {
   /* if there is no CuDNN error, do not do anything */
-  if (status == CUDNN_STATUS_SUCCESS) { return vl::vlSuccess ; }
+  if (status == CUDNN_STATUS_SUCCESS) { return vl::VLE_Success ; }
 
   /* if there is a CuDNN error, store it */
   lastCudnnError = status ;
@@ -197,7 +333,7 @@ vl::CudaHelper::catchCudnnError(cudnnStatus_t status, char const* description)
     message = std::string(description) + " (" + message + ")" ;
   }
   lastCudnnErrorMessage = message ;
-  return vl::vlErrorCudnn ;
+  return vl::VLE_Cudnn ;
 }
 
 cudnnStatus_t
@@ -217,12 +353,12 @@ vl::CudaHelper::getLastCudnnErrorMessage() const
  * Cuda Errors
  * ---------------------------------------------------------------- */
 
-vl::Error
+vl::ErrorCode
 vl::CudaHelper::catchCudaError(char const* description)
 {
   /* if there is no Cuda error, do not do anything */
   cudaError_t error = cudaPeekAtLastError() ;
-  if (error == cudaSuccess) { return vl::vlSuccess ; }
+  if (error == cudaSuccess) { return vl::VLE_Success ; }
 
   /* if there is a Cuda error, eat it and store it */
   lastCudaError = cudaGetLastError() ;
@@ -231,7 +367,7 @@ vl::CudaHelper::catchCudaError(char const* description)
     message = std::string(description) + ": " + message ;
   }
   lastCudaErrorMessage = message ;
-  return vl::vlErrorCuda ;
+  return vl::VLE_Cuda ;
 }
 
 cudaError_t

@@ -26,7 +26,7 @@ enum {
 } ;
 
 /* options */
-vlmxOption  options [] = {
+VLMXOption  options [] = {
   {"Verbose",          0,   opt_verbose           },
   {0,                  0,   0                     }
 } ;
@@ -100,12 +100,17 @@ void mexFunction(int nout, mxArray *out[],
   vl::MexTensor derOutput(context) ;
 
   data.init(in[IN_DATA]) ;
-  if (backMode) { derOutput.init(in[IN_DEROUTPUT]) ; }
+  data.reshape(4) ;
+
+  if (backMode) {
+    derOutput.init(in[IN_DEROUTPUT]) ;
+    derOutput.reshape(4) ;
+  }
 
   if (backMode && ! vl::areCompatible(data, derOutput)) {
-    mexErrMsgTxt("DATA and DEROUTPUT are not both CPU or GPU arrays.") ;
+    mexErrMsgTxt("DATA and DEROUTPUT do not have compatible formats.") ;
   }
-  if (backMode && (data.getGeometry() != derOutput.getGeometry())) {
+  if (backMode && (data.getShape() != derOutput.getShape())) {
     mexErrMsgTxt("DATA and DEROUTPUT do not have the same size.") ;
   }
 
@@ -125,17 +130,18 @@ void mexFunction(int nout, mxArray *out[],
   }
 
   /* Create output buffers */
-  vl::Device type = data.getMemoryType() ;
+  vl::DeviceType deviceType = data.getDeviceType() ;
+  vl::DataType dataType = data.getDataType() ;
   vl::MexTensor output(context) ;
   vl::MexTensor derData(context) ;
   if (!backMode) {
-    output.init(type, data.getGeometry()) ;
+    output.init(deviceType, dataType, data.getShape()) ;
   } else {
-    derData.init(type, data.getGeometry()) ;
+    derData.init(deviceType, dataType, data.getShape()) ;
   }
 
   if (verbosity > 0) {
-    mexPrintf("vl_nnnormalize: mode %s; %s\n",  (data.getMemoryType()==vl::GPU)?"gpu":"cpu", backMode?"backward":"forward") ;
+    mexPrintf("vl_nnnormalize: mode %s; %s\n",  (data.getDeviceType()==vl::VLDT_GPU)?"gpu":"cpu", backMode?"backward":"forward") ;
     mexPrintf("vl_nnnormalize: (depth,kappa,alpha,beta): (%d,%g,%g,%g)\n",
               normDepth, normKappa, normAlpha, normBeta) ;
     vl::print("vl_nnnormalize: data: ", data) ;
@@ -151,15 +157,15 @@ void mexFunction(int nout, mxArray *out[],
   /*                                                    Do the work */
   /* -------------------------------------------------------------- */
 
-  vl::Error error ;
+  vl::ErrorCode error ;
 
   if (!backMode) {
-    error = vl::nnnormalize_forward(context,
+    error = vl::nnlrn_forward(context,
                                     output, data,
                                     normDepth,
                                     normKappa, normAlpha, normBeta) ;
   } else {
-    error = vl::nnnormalize_backward(context,
+    error = vl::nnlrn_backward(context,
                                      derData, data, derOutput,
                                      normDepth,
                                      normKappa, normAlpha, normBeta) ;
@@ -169,7 +175,7 @@ void mexFunction(int nout, mxArray *out[],
   /*                                                         Finish */
   /* -------------------------------------------------------------- */
 
-  if (error != vl::vlSuccess) {
+  if (error != vl::VLE_Success) {
     mexErrMsgTxt(context.getLastErrorMessage().c_str()) ;
   }
   if (backMode) {
