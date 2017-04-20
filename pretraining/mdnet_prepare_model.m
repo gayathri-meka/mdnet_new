@@ -8,11 +8,13 @@ function mdnet_prepare_model()
 %
 % Hyeonseob Nam, 2015
 % 
+addpath('/home/gayathri/MDNet')
+addpath('/home/gayathri/MDNet/models')
 
 % conv1-3 layers from VGG-M network pretrained on ImageNet
-src_model = './models/imagenet-vgg-m-conv1-3.mat';
+src_model = 'models/imagenet-vgg-m-conv1-3.mat';
 % output network 
-dst_model = './models/mdnet_init.mat';
+dst_model = 'models/mdnet_init.mat';
 
 if exist(dst_model,'file')
     return;
@@ -82,5 +84,9 @@ new_layers{end+1} = struct('type', 'conv', ...
                            'biasesWeightDecay', 0) ;
 new_layers{end+1} = struct('type', 'softmaxloss', 'name', 'loss') ;
 
-clear layers; layers = new_layers;
-save(dst_model,'layers');
+clear layers; 
+layers = new_layers;
+
+%cd models
+save('mdnet_init.mat','layers');
+%cd ..

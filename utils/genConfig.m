@@ -18,7 +18,7 @@ config.seqName = seqName;
 switch(dataset)
     case {'otb'}
         % path to OTB dataset
-        benchmarkSeqHome ='./dataset/OTB/';
+        benchmarkSeqHome ='../dataset/OTB/';
         
         % img path
         switch(config.seqName)
@@ -76,9 +76,9 @@ switch(dataset)
         config.imgList = config.imgList(1:nFrames);
         config.gt = config.gt(1:nFrames,:);
         
-    case {'vot2013','vot2014','vot2015'}
+    case {'vot2013','vot2014','vot2015','vot2016'}
         % path to VOT dataset
-        benchmarkSeqHome = ['./dataset/VOT/', dataset(end-3:end)];
+        benchmarkSeqHome = ['../dataset/VOT/', dataset(end-3:end)];
         
         % img path
         config.imgDir = fullfile(benchmarkSeqHome, config.seqName);

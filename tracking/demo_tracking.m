@@ -7,12 +7,17 @@
 
 clear;
 
+addpath('../utils')
+addpath('../matconvnet')
+addpath('../matconvnet/matlab')
+addpath('../matconvnet/matlab/mex')
+
 conf = genConfig('otb','Diving');
 % conf = genConfig('vot2015','ball1');
 
 switch(conf.dataset)
     case 'otb'
-        net = fullfile('models','mdnet_vot-otb.mat');
+        net = fullfile('../models','mdnet_vot-otb.mat');
     case 'vot2014'
         net = fullfile('models','mdnet_otb-vot14.mat');
     case 'vot2015'
@@ -20,3 +25,5 @@ switch(conf.dataset)
 end
 
 result = mdnet_run(conf.imgList, conf.gt(1,:), net);
+
+result

@@ -6,10 +6,17 @@ function [ ] = mdnet_pretrain( varargin )
 % Hyeonseob Nam, 2015
 % 
 
+% arg1: 'seqsList'
+% arg2:  {struct('dataset','otb','list','pretraining/seqList/otb-vot15.txt')}
+% arg3&4: 'outFile', fullfile('models','mdnet_otb-vot15_new.mat')
+% arg4&5: 'roiDir', fullfile('models','data_otb-vot15')
+addpath('/home/gayathri/MDNet/utils')
 % The list of tracking sequences for training MDNet.
-opts.seqsList  = {struct('dataset','vot2013','list','pretraining/seqList/vot13-otb.txt'),...
-    struct('dataset','vot2014','list','pretraining/seqList/vot14-otb.txt'),...
-    struct('dataset','vot2015','list','pretraining/seqList/vot15-otb.txt')};
+opts.seqsList  = { struct('dataset','vot2016','list','/home/gayathri/MDNet/pretraining/seqList/vot16-otb.txt')};
+    %struct('dataset','vot2013','list','pretraining/seqList/vot13-otb.txt'),...
+    %struct('dataset','vot2014','list','pretraining/seqList/vot14-otb.txt'),...
+    %struct('dataset','vot2015','list','pretraining/seqList/vot15-otb.txt')};
+
 
 % The path to the initial network. 
 opts.netFile    = fullfile('models','mdnet_init.mat') ;
@@ -112,8 +119,7 @@ roidb = {};
 for D = 1:length(seqList)
     
     dataset = seqList{D}.dataset;
-    seqs_train = importdata(seqList{D}.list);
-    
+	seqs_train = importdata(seqList{D}.list);
     roidb_ = cell(1,length(seqs_train));
     
     for i = 1:length(seqs_train)
