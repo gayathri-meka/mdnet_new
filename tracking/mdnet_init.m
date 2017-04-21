@@ -66,10 +66,16 @@ opts.imgSize = size(image);
 
 %% load net
 net = load(opts.net_file);
+
+%added
+%net = vl_simplenn_tidy(net);
+
 if isfield(net,'net'), net = net.net; end
 net_conv.layers = net.layers(1:10);
 net_fc.layers = net.layers(11:end);
 clear net;
+
+
 
 for i=1:numel(net_fc.layers)
     switch (net_fc.layers{i}.name)
